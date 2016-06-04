@@ -15,6 +15,10 @@
       %%      scribester_simple_message_listener]},
 
       %% {scribester_text_storage_logdir,
-      %%     "<path to log dir>"}
+      %%     "<path to log dir>"},
+
+      %% {scribester_frontend_ip, "0.0.0.0"},
+      %% {scribester_frontend_port, 8080},
+      %% {scribester_frontend_options, []}
     ]}
 ].

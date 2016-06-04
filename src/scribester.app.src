@@ -6,13 +6,18 @@
   {applications, [
                   kernel,
                   stdlib,
-                  exmpp
+                  exmpp,
+                  cowboy
                  ]},
   {mod, { scribester_app, []}},
   {env, [
     {scribester_resource, "scribester_resource"},
     {scribester_timezone, "GMT"},
     {scribester_timeformat, "Y-m-d:H:i:s"},
-    {scribester_listeners, [scribester_text_storage_listener]}
+    {scribester_listeners, [scribester_text_storage_listener]},
+
+    {scribester_frontend_ip, "0.0.0.0"},
+    {scribester_frontend_port, 8080},
+    {scribester_frontend_options, []}
   ]}
  ]}.
