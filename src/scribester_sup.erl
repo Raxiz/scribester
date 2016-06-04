@@ -23,5 +23,9 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-  {ok, { {one_for_one, 5, 10}, [?CHILD(scribester_bot, worker)]} }.
+  {ok, { {one_for_one, 5, 10}, [
+    ?CHILD(scribester_bot, worker),
+    ?CHILD(scribester_message_event, worker),
+    ?CHILD(scribester_simple_message_listener, worker)
+  ]} }.
 

@@ -87,7 +87,7 @@ join_room(Session, Room) ->
   ok. %TODO: find a way to see if join have failed.
 
 handle_message_in_room(Room, From, Msg, Time) ->
-  io:format("[~s] (~p) ~s: ~s~n", [Room, Time, From, Msg]). %TODO
+  ok = scribester_message_event:message_event(Room, From, Msg, Time).
 
 handle_xmpp_packet(#received_packet{
           packet_type=message,
