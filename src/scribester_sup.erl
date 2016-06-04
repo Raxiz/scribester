@@ -23,9 +23,12 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
+  {ok, ListenerModules} = application:get_env(scribester_listeners),
+  ListenerSpecs = [?CHILD(M, worker) || M <- ListenerModules],
+
   {ok, { {one_for_one, 5, 10}, [
-    ?CHILD(scribester_bot, worker),
-    ?CHILD(scribester_message_event, worker),
-    ?CHILD(scribester_simple_message_listener, worker)
-  ]} }.
+      ?CHILD(scribester_bot, worker),
+      ?CHILD(scribester_message_event, worker)
+    ] ++ ListenerSpecs
+  } }.
 

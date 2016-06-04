@@ -12,6 +12,7 @@
   {env, [
     {scribester_resource, "scribester_resource"},
     {scribester_timezone, "GMT"},
-    {scribester_timeformat, "Y-m-d:H:i:s"}
+    {scribester_timeformat, "Y-m-d:H:i:s"},
+    {scribester_listeners, [scribester_text_storage_listener]}
   ]}
  ]}.
