@@ -34,7 +34,8 @@ form_room_index(Room) ->
     [] ->
       <<>>;
     Logs ->
-      FileList = [[<<"<li>">>, make_file_link(Room, File)] || File <- Logs],
+      FileList = [[<<"<li>">>, make_file_link(Room, File), <<"<br>">>]
+                  || File <- Logs],
       [<<"<p><h1>">>, Room, <<"</h1><p><ul>">>, FileList, <<"</ul></p></p">>]
   end.
 
