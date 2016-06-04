@@ -23,7 +23,12 @@ start() ->
 
 start(_StartType, _StartArgs) ->
   ensure_mandatory_env(),
-  start_frontend(),
+  case application:get_env(?APP_NAME, scribester_frontend_enable) of
+    {ok, true} ->
+      start_frontend();
+    {ok, false} ->
+      ok
+  end,
   scribester_sup:start_link().
 
 stop(_State) ->
