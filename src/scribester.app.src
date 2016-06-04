@@ -9,5 +9,9 @@
                   exmpp
                  ]},
   {mod, { scribester_app, []}},
-  {env, []}
+  {env, [
+    {scribester_resource, "scribester_resource"},
+    {scribester_timezone, "GMT"},
+    {scribester_timeformat, "Y-m-d:H:i:s"}
+  ]}
  ]}.

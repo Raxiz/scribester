@@ -38,7 +38,9 @@ handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
 handle_cast({message_event, Room, User, Body, Time}, State) ->
-  TimeStr = iso8601:format(Time),
+  {ok, TimeZone} = application:get_env(scribester_timezone),
+  {ok, TimeFormat} = application:get_env(scribester_timeformat),
+  TimeStr = qdate:to_string(TimeFormat, TimeZone, Time),
   io:format("[~s] (~s) ~s: ~s~n", [Room, TimeStr, User, Body]),
   {noreply, State}.
 

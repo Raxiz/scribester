@@ -4,7 +4,10 @@
       {scribester_server, "<xmpp server here>"},
       {scribester_username, "<username here>"},
       {scribester_password, "<password here>"},
-      {scribester_resource, "scribester_resource"},
-      {scribester_monitored_rooms, ["<monitored room here>"]}
+      {scribester_monitored_rooms, ["<monitored room here>"]},
+
+      %% {scribester_resource, "scribester_resource"},
+      %% {scribester_timezone, "GMT"},
+      %% {scribester_timeformat, "Y-m-d:H:i:s"}
     ]}
 ].
