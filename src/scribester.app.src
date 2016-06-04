@@ -1,0 +1,13 @@
+{application, scribester,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, [scribester_app, scribester_sup, scribester_bot]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  exmpp
+                 ]},
+  {mod, { scribester_app, []}},
+  {env, []}
+ ]}.
