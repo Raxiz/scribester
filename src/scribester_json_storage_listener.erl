@@ -1,4 +1,4 @@
--module(scribester_text_storage_listener).
+-module(scribester_json_storage_listener).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 
@@ -44,12 +44,25 @@ handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
 handle_cast({message_event, Room, User, Body, Time}, State) ->
-  {ok, TimeZone} = application:get_env(scribester_timezone),
-  {ok, TimeFormat} = application:get_env(scribester_timeformat),
-  TimeStr = qdate:to_string(TimeFormat, TimeZone, Time),
-  Line = ["[", TimeStr, "] ", User, ": ", Body, "\n"],
-  NState = append_line_to_room_log(Room, Time, Line, State),
-  {noreply, NState}.
+  EpochStart = calendar:datetime_to_gregorian_seconds(
+                 {{1970, 1, 1}, {0, 0, 0}}),
+  TimeStamp = calendar:datetime_to_gregorian_seconds(Time) - EpochStart,
+
+  {ok, Dir} = application:get_env(scribester_json_storage_logdir),
+  Path = iolist_to_binary([Dir, "/", Room]),
+
+  LineTerm = [
+    {type, message},
+    {timestamp, TimeStamp},
+    {sender, User},
+    {message, Body}
+  ],
+  Line = jsx:encode(LineTerm, [escaped_strings]),
+
+  ok = filelib:ensure_dir(Path),
+  {ok, File} = file:open(Path, [append, {encoding, utf8}]),
+  io:format(File, "~ts~n", [Line]),
+  {noreply, State}.
 
 handle_info(_Info, State) ->
   {noreply, State}.
@@ -64,15 +77,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
 
-append_line_to_room_log(Room, Time, Line, State) ->
-  {ok, TimeZone} = application:get_env(scribester_timezone),
-  Date = qdate:to_string("Y-m-d", TimeZone, Time),
-  {ok, AllLogsDir} = application:get_env(scribester_text_storage_logdir),
-  Dir = iolist_to_binary([AllLogsDir, "/", Room, "/"]),
-  Path = iolist_to_binary([Dir, "/", Date, ".log"]),
-
-  ok = filelib:ensure_dir(Path),
-  {ok, File} = file:open(Path, [append, {encoding, utf8}]),
-  io:format(File, "~ts", [Line]),
-  file:close(File),
-  State.

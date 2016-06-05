@@ -14,9 +14,13 @@
 
       %% {scribester_listeners,
       %%     [scribester_text_storage_listener,
+      %%      scribester_json_storage_listener,
       %%      scribester_simple_message_listener]},
 
       %% {scribester_text_storage_logdir,
+      %%     "<path to log dir>"},
+
+      %% {scribester_json_storage_logdir,
       %%     "<path to log dir>"},
 
       %% {scribester_frontend_enable, true},
