@@ -46,10 +46,11 @@ init([]) ->
   {ok, Resource} = application:get_env(scribester_resource),
   {ok, Rooms} = application:get_env(scribester_monitored_rooms),
 
-  Session = exmpp_session:start(),
+  Session = exmpp_session:start_link(),
   JID = exmpp_jid:make(Username, Server, Resource),
   ok  = exmpp_session:auth_basic_digest(Session, JID, Password),
-  {ok, _} = exmpp_session:connect_TCP(Session, Server, 5222),
+  {ok, _} = exmpp_session:connect_TCP(Session, Server, 5222,
+    [{whitespace_ping, 10}]),
   {ok, _} = exmpp_session:login(Session),
   exmpp_session:send_packet(Session,
                     exmpp_presence:set_status(exmpp_presence:available(), "")),
