@@ -24,7 +24,8 @@
 %% ------------------------------------------------------------------
 
 -record(state, {
-    session
+    session,
+    logging_enabled
   }).
 
 %% ------------------------------------------------------------------
@@ -53,7 +54,7 @@ init([]) ->
   exmpp_session:send_packet(Session,
                     exmpp_presence:set_status(exmpp_presence:available(), "")),
   [join_room(Session, R) || R <- Rooms],
-  {ok, #state{session=Session}}.
+  {ok, #state{session=Session, logging_enabled=true}}.
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -86,8 +87,14 @@ join_room(Session, Room) ->
                                Room ++ "/" ++ Username)),
   ok. %TODO: find a way to see if join have failed.
 
-handle_message_in_room(Room, From, Msg, Time) ->
-  ok = scribester_message_event:message_event(Room, From, Msg, Time).
+handle_message_in_room(Room, From, Msg, Time,
+                       #state{logging_enabled=LoggingEnabled}) ->
+  case LoggingEnabled of
+    true ->
+      ok = scribester_message_event:message_event(Room, From, Msg, Time);
+    false ->
+      ok
+  end.
 
 handle_xmpp_packet(#received_packet{
           packet_type=message,
@@ -98,8 +105,13 @@ handle_xmpp_packet(#received_packet{
   Room = [RoomName, "@", RoomServer],
   Body = exmpp_message:get_body(Raw),
   Time = extract_timestamp(Raw),
-  handle_message_in_room(Room, From, Body, Time),
-  State;
+  handle_message_in_room(Room, From, Body, Time, State),
+  case application:get_env(scribester_special_commands_enabled) of
+    {ok, true} ->
+      look_for_special_command(Body, Room, State);
+    {ok, false} ->
+      State
+  end;
 handle_xmpp_packet(_, State) ->
   State.
 
@@ -112,3 +124,42 @@ extract_timestamp(Raw) ->
     _ ->
       iso8601:parse(iolist_to_binary(Stamp))
   end.
+
+look_for_special_command(Body, Room, State) ->
+  {ok, Username} = application:get_env(scribester_username),
+  Prefix = <<(iolist_to_binary(Username))/binary, " ">>,
+  PrefixSize = size(Prefix),
+  case Body of
+    <<Prefix:PrefixSize/binary, Rest/binary>> ->
+      handle_special_command(Rest, Room, State);
+    _ ->
+      State
+  end.
+
+handle_special_command(<<"off">>, Room, State) ->
+  send_message_to_room(<<"Logging off">>, Room, State),
+  State#state{logging_enabled=false};
+
+handle_special_command(<<"on">>, Room, State) ->
+  send_message_to_room(<<"Logging on">>, Room, State),
+  State#state{logging_enabled=true};
+
+handle_special_command(<<"status">>, Room, State) ->
+  send_message_to_room(status_message(State), Room, State),
+  State;
+
+handle_special_command(Cmd, Room, State) ->
+  send_message_to_room(<<"Unknown command: ", Cmd/binary>>, Room, State),
+  State.
+
+send_message_to_room(Message, Room, #state{session=Session}) ->
+  exmpp_session:send_packet(Session,
+    exmpp_stanza:set_recipient(exmpp_message:groupchat(Message), Room)).
+
+status_message(#state{logging_enabled=LoggingEnabled}) ->
+  Header = <<"Status: ">>,
+  LoggingStatus = case LoggingEnabled of
+    true -> <<"Logging is on; ">>;
+    false -> <<"Logging is off; ">>
+  end,
+  [Header, LoggingStatus].

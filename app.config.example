@@ -6,6 +6,8 @@
       {scribester_password, "<password here>"},
       {scribester_monitored_rooms, ["<monitored room here>"]},
 
+      %% {scribester_special_commands_enabled, true},
+
       %% {scribester_resource, "scribester_resource"},
       %% {scribester_timezone, "GMT"},
       %% {scribester_timeformat, "Y-m-d:H:i:s"},
