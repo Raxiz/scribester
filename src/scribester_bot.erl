@@ -25,7 +25,8 @@
 
 -record(state, {
     session,
-    logging_enabled
+    logging_enabled = true,
+    log_old_messages = true
   }).
 
 %% ------------------------------------------------------------------
@@ -40,22 +41,9 @@ start_link() ->
 %% ------------------------------------------------------------------
 
 init([]) ->
-  {ok, Username} = application:get_env(scribester_username),
-  {ok, Server} = application:get_env(scribester_server),
-  {ok, Password} = application:get_env(scribester_password),
-  {ok, Resource} = application:get_env(scribester_resource),
-  {ok, Rooms} = application:get_env(scribester_monitored_rooms),
-
-  Session = exmpp_session:start_link(),
-  JID = exmpp_jid:make(Username, Server, Resource),
-  ok  = exmpp_session:auth_basic_digest(Session, JID, Password),
-  {ok, _} = exmpp_session:connect_TCP(Session, Server, 5222,
-    [{whitespace_ping, 10}]),
-  {ok, _} = exmpp_session:login(Session),
-  exmpp_session:send_packet(Session,
-                    exmpp_presence:set_status(exmpp_presence:available(), "")),
-  [join_room(Session, R) || R <- Rooms],
-  {ok, #state{session=Session, logging_enabled=true}}.
+  Session = start_session(),
+  monitor(process, Session),
+  {ok, #state{session=Session}}.
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -67,6 +55,15 @@ handle_info(#received_packet{} = Packet, State) ->
   %% io:format("~p~n", [Packet]),
   NState = handle_xmpp_packet(Packet, State),
   {noreply, NState};
+
+handle_info({'DOWN', _MonRef, process, _Pid, Info}, State) ->
+  error_logger:error_msg("XMPP Session down: ~p~n", [Info]),
+  Session = start_session(),
+  monitor(process, Session),
+  {noreply, State#state{
+    session = Session,
+    log_old_messages = false
+  }};
 
 handle_info(_Info, State) ->
   {noreply, State}.
@@ -80,6 +77,24 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
+
+start_session() ->
+  {ok, Username} = application:get_env(scribester_username),
+  {ok, Server} = application:get_env(scribester_server),
+  {ok, Password} = application:get_env(scribester_password),
+  {ok, Resource} = application:get_env(scribester_resource),
+  {ok, Rooms} = application:get_env(scribester_monitored_rooms),
+
+  Session = exmpp_session:start(),
+  JID = exmpp_jid:make(Username, Server, Resource),
+  ok  = exmpp_session:auth_basic_digest(Session, JID, Password),
+  {ok, _} = exmpp_session:connect_TCP(Session, Server, 5222,
+    [{whitespace_ping, 10}]),
+  {ok, _} = exmpp_session:login(Session),
+  exmpp_session:send_packet(Session,
+                    exmpp_presence:set_status(exmpp_presence:available(), "")),
+  [join_room(Session, R) || R <- Rooms],
+  Session.
 
 join_room(Session, Room) ->
   {ok, Username} = application:get_env(scribester_username),
@@ -102,19 +117,27 @@ handle_xmpp_packet(#received_packet{
           type_attr="groupchat",
           from={RoomName, RoomServer, From},
           raw_packet=Raw
-       }, State) when From /= undefined ->
+       }, State = #state{log_old_messages = LogOld}) when From /= undefined ->
   Room = [RoomName, "@", RoomServer],
   Body = exmpp_message:get_body(Raw),
-  Time = extract_timestamp(Raw),
-  handle_message_in_room(Room, From, Body, Time, State),
-  case application:get_env(scribester_special_commands_enabled) of
-    {ok, true} ->
-      look_for_special_command(Body, Room, State);
-    {ok, false} ->
+  case LogOld orelse not is_old_message(Raw) of
+    true ->
+      Time = extract_timestamp(Raw),
+      handle_message_in_room(Room, From, Body, Time, State),
+      case application:get_env(scribester_special_commands_enabled) of
+        {ok, true} ->
+          look_for_special_command(Body, Room, State);
+        {ok, false} ->
+          State
+      end;
+    false ->
       State
   end;
 handle_xmpp_packet(_, State) ->
   State.
+
+is_old_message(Raw) ->
+  exmpp_xml:get_element(Raw, 'urn:xmpp:delay', delay) /= undefined.
 
 extract_timestamp(Raw) ->
   Delay = exmpp_xml:get_element(Raw, 'urn:xmpp:delay', delay),
