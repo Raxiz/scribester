@@ -1,5 +1,5 @@
 -module(scribester_bot).
--behaviour(gen_server).
+-behaviour(restart_srv).
 -define(SERVER, ?MODULE).
 
 -include_lib("exmpp/include/exmpp_client.hrl").
@@ -13,18 +13,17 @@
 -export([start_link/0]).
 
 %% ------------------------------------------------------------------
-%% gen_server Function Exports
+%% restart_srv Function Exports
 %% ------------------------------------------------------------------
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/4, handle_cast/3, handle_info/3,
+         on_restart/1, terminate/3]).
 
 %% ------------------------------------------------------------------
 %% Records
 %% ------------------------------------------------------------------
 
 -record(state, {
-    session,
     logging_enabled = true,
     log_old_messages = true
   }).
@@ -34,45 +33,36 @@
 %% ------------------------------------------------------------------
 
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  restart_srv:start_link({local, ?SERVER},
+                         ?MODULE, fun start_session/0, [],
+                         [{terminate_func, fun exmpp_session:stop/1}]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
 init([]) ->
-  Session = start_session(),
-  monitor(process, Session),
-  {ok, #state{session=Session}}.
+  {ok, #state{}}.
 
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, _Pid, State) ->
   {reply, ok, State}.
 
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, _Pid, State) ->
   {noreply, State}.
 
-handle_info(#received_packet{} = Packet, State) ->
+handle_info(#received_packet{} = Packet, Pid, State) ->
   %% io:format("~p~n", [Packet]),
-  NState = handle_xmpp_packet(Packet, State),
+  NState = handle_xmpp_packet(Packet, Pid, State),
   {noreply, NState};
 
-handle_info({'DOWN', _MonRef, process, _Pid, Info}, State) ->
-  error_logger:error_msg("XMPP Session down: ~p~n", [Info]),
-  Session = start_session(),
-  monitor(process, Session),
-  {noreply, State#state{
-    session = Session,
-    log_old_messages = false
-  }};
-
-handle_info(_Info, State) ->
+handle_info(_Info, _Pid, State) ->
   {noreply, State}.
 
-terminate(_Reason, _State) ->
-  ok.
+on_restart(State) ->
+  {ok, State#state{log_old_messages=false}}.
 
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+terminate(_Reason, _Pid, _State) ->
+  ok.
 
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
@@ -94,7 +84,7 @@ start_session() ->
   exmpp_session:send_packet(Session,
                     exmpp_presence:set_status(exmpp_presence:available(), "")),
   [join_room(Session, R) || R <- Rooms],
-  Session.
+  {ok, Session}.
 
 join_room(Session, Room) ->
   {ok, Username} = application:get_env(scribester_username),
@@ -103,7 +93,7 @@ join_room(Session, Room) ->
                                Room ++ "/" ++ Username)),
   ok. %TODO: find a way to see if join have failed.
 
-handle_message_in_room(Room, From, Msg, Time,
+handle_message_in_room(Room, From, Msg, Time, _Pid,
                        #state{logging_enabled=LoggingEnabled}) ->
   case LoggingEnabled of
     true ->
@@ -116,24 +106,24 @@ handle_xmpp_packet(#received_packet{
           packet_type=message,
           type_attr="groupchat",
           from={RoomName, RoomServer, From},
-          raw_packet=Raw
-       }, State = #state{log_old_messages = LogOld}) when From /= undefined ->
+          raw_packet=Raw}, Pid,
+         State = #state{log_old_messages = LogOld}) when From /= undefined ->
   Room = [RoomName, "@", RoomServer],
   Body = exmpp_message:get_body(Raw),
   case LogOld orelse not is_old_message(Raw) of
     true ->
       Time = extract_timestamp(Raw),
-      handle_message_in_room(Room, From, Body, Time, State),
+      handle_message_in_room(Room, From, Body, Time, Pid, State),
       case application:get_env(scribester_special_commands_enabled) of
         {ok, true} ->
-          look_for_special_command(Body, Room, State);
+          look_for_special_command(Body, Room, Pid, State);
         {ok, false} ->
           State
       end;
     false ->
       State
   end;
-handle_xmpp_packet(_, State) ->
+handle_xmpp_packet(_, _Pid, State) ->
   State.
 
 is_old_message(Raw) ->
@@ -149,34 +139,34 @@ extract_timestamp(Raw) ->
       iso8601:parse(iolist_to_binary(Stamp))
   end.
 
-look_for_special_command(Body, Room, State) ->
+look_for_special_command(Body, Room, Pid, State) ->
   {ok, Username} = application:get_env(scribester_username),
   Prefix = <<(iolist_to_binary(Username))/binary, " ">>,
   PrefixSize = size(Prefix),
   case Body of
     <<Prefix:PrefixSize/binary, Rest/binary>> ->
-      handle_special_command(Rest, Room, State);
+      handle_special_command(Rest, Room, Pid, State);
     _ ->
       State
   end.
 
-handle_special_command(<<"off">>, Room, State) ->
-  send_message_to_room(<<"Logging off">>, Room, State),
+handle_special_command(<<"off">>, Room, Pid, State) ->
+  send_message_to_room(<<"Logging off">>, Room, Pid, State),
   State#state{logging_enabled=false};
 
-handle_special_command(<<"on">>, Room, State) ->
-  send_message_to_room(<<"Logging on">>, Room, State),
+handle_special_command(<<"on">>, Room, Pid, State) ->
+  send_message_to_room(<<"Logging on">>, Room, Pid, State),
   State#state{logging_enabled=true};
 
-handle_special_command(<<"status">>, Room, State) ->
-  send_message_to_room(status_message(State), Room, State),
+handle_special_command(<<"status">>, Room, Pid, State) ->
+  send_message_to_room(status_message(State), Room, Pid, State),
   State;
 
-handle_special_command(Cmd, Room, State) ->
-  send_message_to_room(<<"Unknown command: ", Cmd/binary>>, Room, State),
+handle_special_command(Cmd, Room, Pid, State) ->
+  send_message_to_room(<<"Unknown command: ", Cmd/binary>>, Room, Pid, State),
   State.
 
-send_message_to_room(Message, Room, #state{session=Session}) ->
+send_message_to_room(Message, Room, Session, _State) ->
   exmpp_session:send_packet(Session,
     exmpp_stanza:set_recipient(exmpp_message:groupchat(Message), Room)).
 
