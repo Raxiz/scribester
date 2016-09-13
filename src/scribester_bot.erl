@@ -123,6 +123,18 @@ handle_xmpp_packet(#received_packet{
     false ->
       State
   end;
+handle_xmpp_packet(#received_packet{
+           packet_type=presence,
+           type_attr="unavailable",
+           from={_RoomName, _RoomServer, From}}, _Pid,
+          State) ->
+  {ok, Username} = application:get_env(scribester_username),
+  case iolist_to_binary(From) == iolist_to_binary(Username) of
+    true ->
+      exit(bot_went_unavailable);
+    false ->
+      State
+  end;
 handle_xmpp_packet(_, _Pid, State) ->
   State.
 
