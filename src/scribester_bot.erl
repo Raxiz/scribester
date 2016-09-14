@@ -133,7 +133,8 @@ handle_xmpp_packet(Packet = #received_packet{
     true ->
       error_logger:error_msg(
         "scribester_bot: received 'unavailable' packet: ~p~n", [Packet]),
-      restart_srv:force_restart(self());
+      restart_srv:force_restart(self()),
+      State;
     false ->
       State
   end;
