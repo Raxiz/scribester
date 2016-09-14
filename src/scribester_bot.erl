@@ -123,7 +123,7 @@ handle_xmpp_packet(#received_packet{
     false ->
       State
   end;
-handle_xmpp_packet(#received_packet{
+handle_xmpp_packet(Packet = #received_packet{
            packet_type=presence,
            type_attr="unavailable",
            from={_RoomName, _RoomServer, From}}, _Pid,
@@ -131,7 +131,9 @@ handle_xmpp_packet(#received_packet{
   {ok, Username} = application:get_env(scribester_username),
   case iolist_to_binary(From) == iolist_to_binary(Username) of
     true ->
-      exit(bot_went_unavailable);
+      error_logger:error_msg(
+        "scribester_bot: received 'unavailable' packet: ~p~n", [Packet]),
+      restart_srv:force_restart(self());
     false ->
       State
   end;
