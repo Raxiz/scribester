@@ -73,13 +73,31 @@ start_session() ->
   {ok, Server} = application:get_env(scribester_server),
   {ok, Password} = application:get_env(scribester_password),
   {ok, Resource} = application:get_env(scribester_resource),
+
+  {ok, UseSSL} = application:get_env(scribester_use_ssl),
+  Port = case application:get_env(scribester_port) of
+    N when is_integer(N) ->
+      N;
+    undefined ->
+      case UseSSL of
+        true -> 5223;
+        false -> 5222
+      end
+  end,
+
   {ok, Rooms} = application:get_env(scribester_monitored_rooms),
 
   Session = exmpp_session:start(),
   JID = exmpp_jid:make(Username, Server, Resource),
   ok  = exmpp_session:auth_basic_digest(Session, JID, Password),
-  {ok, _} = exmpp_session:connect_TCP(Session, Server, 5222,
-    [{whitespace_ping, 10}]),
+  case UseSSL of
+    true ->
+      {ok, _} = exmpp_session:connect_SSL(Session, Server, Port,
+                                          [{whitespace_ping, 10}]);
+    false ->
+      {ok, _} = exmpp_session:connect_TCP(Session, Server, Port,
+                                          [{whitespace_ping, 10}])
+  end,
   {ok, _} = exmpp_session:login(Session),
   exmpp_session:send_packet(Session,
                     exmpp_presence:set_status(exmpp_presence:available(), "")),

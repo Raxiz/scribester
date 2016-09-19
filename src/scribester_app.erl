@@ -12,6 +12,9 @@
 start() ->
   ensure_started(exmpp, permanent),
   ensure_started(crypto, permanent),
+  ensure_started(asn1, permanent),
+  ensure_started(public_key, permanent),
+  ensure_started(ssl, permanent),
   ensure_started(ranch, permanent),
   ensure_started(cowlib, permanent),
   ensure_started(cowboy, permanent),

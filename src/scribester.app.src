@@ -16,6 +16,9 @@
     {scribester_timeformat, "Y-m-d:H:i:s"},
     {scribester_listeners, [scribester_text_storage_listener]},
 
+    {scribester_port, undefined},
+    {scribester_use_ssl, true},
+
     {scribester_special_commands_enabled, true},
 
     {scribester_frontend_enable, true},
