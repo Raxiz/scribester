@@ -76,9 +76,9 @@ start_session() ->
 
   {ok, UseSSL} = application:get_env(scribester_use_ssl),
   Port = case application:get_env(scribester_port) of
-    N when is_integer(N) ->
+    {ok, N} when is_integer(N) ->
       N;
-    undefined ->
+    {ok, undefined} ->
       case UseSSL of
         true -> 5223;
         false -> 5222
