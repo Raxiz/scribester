@@ -134,7 +134,12 @@ handle_xmpp_packet(#received_packet{
       handle_message_in_room(Room, From, Body, Time, Pid, State),
       case application:get_env(scribester_special_commands_enabled) of
         {ok, true} ->
-          look_for_special_command(Body, Room, Pid, State);
+          case is_old_message(Raw) of
+            true ->
+              State;
+            false ->
+              look_for_special_command(Body, Room, Pid, State)
+          end;
         {ok, false} ->
           State
       end;
