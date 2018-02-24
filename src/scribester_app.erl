@@ -18,6 +18,7 @@ start() ->
   ensure_started(ranch, permanent),
   ensure_started(cowlib, permanent),
   ensure_started(cowboy, permanent),
+  ensure_started(erlexec, permanent),
   ensure_started(scribester, transient).
 
 %% ===================================================================

@@ -201,8 +201,35 @@ handle_special_command(<<"status">>, Room, Pid, State) ->
   State;
 
 handle_special_command(Cmd, Room, Pid, State) ->
-  send_message_to_room(<<"Unknown command: ", Cmd/binary>>, Room, Pid, State),
+  case find_external_command(Cmd) of
+    {ok, Script} ->
+      Params = [{config, export_config()}, {room, iolist_to_binary(Room)}, {command, Cmd}],
+      Stdin = jsx:encode(Params),
+      case run_script(Script, Stdin) of
+        {ok, Output} ->
+          send_message_to_room(Output, Room, Pid, State);
+        {error, Reason, Output, Stderr} ->
+          Message = [<<"Error ">>, io_lib:format("~p", [Reason]), <<".\nStdout:\n">>, Output, <<"\n\nStderr:\n">>, Stderr],
+          send_message_to_room(Message, Room, Pid, State)
+      end;
+    {error, notfound} ->
+      send_message_to_room(<<"Unknown command: ", Cmd/binary>>, Room, Pid, State)
+  end,
   State.
+
+find_external_command(Cmd) ->
+  {ok, ExtCommands} = application:get_env(scribester_external_commands),
+  find_external_command(Cmd, ExtCommands).
+
+find_external_command(_Cmd, []) ->
+  {error, notfound};
+find_external_command(Cmd, [{ExtCmdName, ExtCmdImpl}|Rest]) ->
+  case iolist_to_binary(ExtCmdName) == Cmd of
+    true ->
+      {ok, ExtCmdImpl};
+    false ->
+      find_external_command(Cmd, Rest)
+  end.
 
 send_message_to_room(Message, Room, Session, _State) ->
   exmpp_session:send_packet(Session,
@@ -215,3 +242,64 @@ status_message(#state{logging_enabled=LoggingEnabled}) ->
     false -> <<"Logging is off; ">>
   end,
   [Header, LoggingStatus].
+
+run_script(Path, Stdin) ->
+  {ok, P, I} = exec:run(Path, [stdin, stdout, stderr, monitor]),
+  exec:send(I, iolist_to_binary(Stdin)),
+  exec:send(I, eof),
+  wait_for_script(P, I, <<>>, <<>>).
+
+wait_for_script(P, I, Stdout, Stderr) ->
+  receive
+    {stdout, I, Text} ->
+      wait_for_script(P, I, [Stdout, Text], Stderr);
+    {stderr, I, Text} ->
+      wait_for_script(P, I, Stdout, [Stderr, Text]);
+    {'DOWN', I, process, P, Reason} ->
+      case Reason of
+        normal ->
+          {ok, Stdout};
+        _ ->
+          {error, Reason, Stdout, Stderr}
+      end
+  end.
+
+export_config() ->
+  Keys = [scribester_monitored_rooms,
+          scribester_timeformat,
+          scribester_frontend_enable,
+          scribester_timezone,
+          scribester_username,
+          scribester_text_storage_logdir,
+          scribester_json_storage_logdir,
+          scribester_resource,
+          scribester_special_commands_enabled,
+          scribester_server],
+  lists:filtermap(fun(K) ->
+                      case application:get_env(K) of
+                        undefined ->
+                          false;
+                        {ok, Val} ->
+                          {true, {K, format_config_value(K, Val)}}
+                      end
+                  end, Keys).
+
+
+format_config_value(scribester_monitored_rooms, Value) ->
+  lists:map(fun iolist_to_binary/1, Value);
+format_config_value(scribester_timeformat, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_timezone, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_username, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_text_storage_logdir, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_json_storage_logdir, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_resource, Value) ->
+  iolist_to_binary(Value);
+format_config_value(scribester_server, Value) ->
+  iolist_to_binary(Value);
+format_config_value(_, Value) ->
+  Value.

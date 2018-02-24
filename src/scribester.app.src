@@ -7,7 +7,8 @@
                   kernel,
                   stdlib,
                   exmpp,
-                  cowboy
+                  cowboy,
+                  erlexec
                  ]},
   {mod, { scribester_app, []}},
   {env, [
@@ -20,6 +21,7 @@
     {scribester_use_ssl, true},
 
     {scribester_special_commands_enabled, true},
+    {scribester_external_commands, []},
 
     {scribester_frontend_enable, true},
     {scribester_frontend_ip, "0.0.0.0"},
